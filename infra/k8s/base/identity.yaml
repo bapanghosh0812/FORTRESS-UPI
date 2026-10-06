@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: identity
+  namespace: fortress-core
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity
+  namespace: fortress-core
+data:
+  # Device binding: SMS-from-SIM + Android key attestation + Play Integrity.
+  FORTRESS_ENV: "staging"
+  APP_PACKAGE: "com.fortress.upi"
+  # Release signing certificate SHA-256 (hex, comma-separated for key rotation).
+  APP_SIGNER_SHA256: ""
+  # The long code / short code the app sends its binding SMS to (operator-provisioned).
+  VIRTUAL_NUMBER: ""
+  ISSUER_KEY_ID: ""
+  ATTESTATION_ROOTS_FILE: "/etc/fortress/secrets/attestation-roots.pem"
+  SMS_HMAC_SECRET_FILE: "/etc/fortress/secrets/sms-hmac"
+  ISSUER_KEY_FILE: "/etc/fortress/secrets/issuer-key.pem"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity
+  namespace: fortress-core
+  labels:
+    app.kubernetes.io/name: identity
+    app.kubernetes.io/part-of: fortress
+spec:
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity
+        app.kubernetes.io/part-of: fortress
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: identity
+      automountServiceAccountToken: false
+      priorityClassName: fortress-critical
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: identity
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: identity
+      volumes:
+        - name: secrets
+          secret:
+            secretName: identity-secrets
+            defaultMode: 0400
+      containers:
+        - name: identity
+          # Digest injected by CD (`kustomize edit set image`) after cosign
+          # verification; Kyverno rejects unsigned or tag-only references.
+          image: ghcr.io/fortress-upi/fortress-identity@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: identity
+          env:
+            # Go 1.25+ derives GOMAXPROCS from the cgroup CPU limit; the soft
+            # memory limit keeps GC ahead of the OOM killer.
+            - name: GOMEMLIMIT
+              value: "230MiB"
+          # Guaranteed QoS (requests == limits) + static CPU manager = exclusive
+          # cores and no CFS throttling spikes on the p99.
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 256Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /etc/fortress/secrets
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 1
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity
+  namespace: fortress-core
+spec:
+  selector:
+    app.kubernetes.io/name: identity
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  # Prefer endpoints in the caller's zone (latency + cross-AZ cost).
+  trafficDistribution: PreferClose
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: identity
+  namespace: fortress-core
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: identity
+  namespace: fortress-core
+spec:
+  scaleTargetRef:
+    name: identity
+  minReplicaCount: 3 # one per AZ, always
+  maxReplicaCount: 60
+  pollingInterval: 5
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          selectPolicy: Max
+          policies:
+            - { type: Percent, value: 100, periodSeconds: 15 }
+            - { type: Pods, value: 10, periodSeconds: 15 }
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - { type: Percent, value: 10, periodSeconds: 60 }
+  triggers:
+    # Primary: requests/s per replica (AverageValue).
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        query: sum(rate(fortress_http_requests_total{namespace="fortress-core",route="identity"}[30s]))
+        threshold: "400"
+    # Safety net: CPU saturation.
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"

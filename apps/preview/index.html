@@ -1,0 +1,89 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fortress UPI Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@300;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+<main class="stage">
+  <div class="device" id="device" data-app-theme="pearl" aria-label="Fortress app">
+    <div class="statusbar"><span id="sbTime">9:41</span><span class="island" aria-hidden="true"></span><span class="sb-icons" id="sbIcons"></span></div>
+    <div class="viewport" id="viewport"></div>
+    <nav class="tabbar" id="tabbar" aria-label="Main" hidden></nav>
+    <canvas id="fx" aria-hidden="true"></canvas>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="sheet-layer" id="sheetLayer"><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Details"></div></div>
+  </div>
+
+  <aside class="rail" id="rail" aria-label="Preview controls">
+    <div class="rail-brand">
+      <img src="fortress-icon.png" alt="Fortress app icon">
+      <h1>Fortress<span>UPI · INTERACTIVE PREVIEW</span></h1>
+    </div>
+    <p>Every screen of the app responds: UPI payments, bills and recharges, requests, autopay, the offline vault and the full settings area. People, banks and billers are examples.</p>
+
+    <section>
+      <h2>Network</h2>
+      <div class="seg" role="group" aria-label="Network">
+        <button data-r="net" data-v="on" aria-pressed="true">Online</button>
+        <button data-r="net" data-v="off" aria-pressed="false">No internet</button>
+      </div>
+    </section>
+    <section>
+      <h2>App theme</h2>
+      <div class="seg" role="group" aria-label="App theme">
+        <button data-r="theme" data-v="pearl" aria-pressed="true">Pearl</button>
+        <button data-r="theme" data-v="midnight" aria-pressed="false">Midnight</button>
+        <button data-r="theme" data-v="system" aria-pressed="false">System</button>
+      </div>
+    </section>
+    <section>
+      <h2>Language</h2>
+      <div class="seg" role="group" aria-label="Language">
+        <button data-r="lang" data-v="en" aria-pressed="true">English</button>
+        <button data-r="lang" data-v="hi" aria-pressed="false" lang="hi">हिन्दी</button>
+      </div>
+    </section>
+    <section>
+      <h2>Jump to</h2>
+      <div class="jumps">
+        <button data-r="jump" data-v="home">Home</button>
+        <button data-r="jump" data-v="scan">Scan &amp; pay</button>
+        <button data-r="jump" data-v="offline">Offline vault</button>
+        <button data-r="jump" data-v="nearby">Pay nearby, offline</button>
+        <button data-r="jump" data-v="receive">Receive offline</button>
+        <button data-r="jump" data-v="bills">Bills &amp; recharges</button>
+        <button data-r="jump" data-v="bank">Bank transfer</button>
+        <button data-r="jump" data-v="requests">Payment requests</button>
+        <button data-r="jump" data-v="history">History</button>
+        <button data-r="jump" data-v="settings">Settings</button>
+        <button data-r="jump" data-v="security">Security</button>
+        <button data-r="jump" data-v="limits">Payment limits</button>
+        <button data-r="jump" data-v="lock">Lock screen</button>
+        <button data-r="jump" data-v="onboarding">Sign-up flow</button>
+      </div>
+    </section>
+    <section>
+      <h2>Things to try</h2>
+      <ul class="tour">
+        <li><b>Scan &amp; pay:</b> the scanner locks onto the shop's QR and opens the payment.</li>
+        <li><b>Pay a friend:</b> review, then confirm on the simulated NPCI PIN screen.</li>
+        <li><b>Go offline:</b> set Network to “No internet”, then use Tap &amp; Pay from the vault.</li>
+        <li><b>Come back online:</b> offline payments settle and your change returns to the bank.</li>
+        <li><b>Fraud shield:</b> open the “KYC refund” request on Home.</li>
+        <li><b>Settings:</b> Profile has accounts, UPI PIN, limits, security, privacy and help.</li>
+      </ul>
+    </section>
+    <div class="note">Example data only. No real money moves. The PIN step is simulated: in the real app NPCI's secure library collects your UPI PIN and Fortress never sees it. The Android app in this project runs the same flows against a sandbox PSP.</div>
+  </aside>
+</main>
+
+<script src="js/core.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/data.js"></script>
+<script src="js/screens-main.js"></script>
+<script src="js/screens-pay.js"></script>
+<script src="js/screens-account.js"></script>
+<script src="js/app.js"></script>

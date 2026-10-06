@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SIM-change detection for device binding (subscription metadata only; no ICCID/IMEI). -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Lets the app hide non-system overlays while visible (tapjacking defense). -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+
+    <!-- Package-visibility allow-list for root-manager detection (RASP signal only). -->
+    <queries>
+        <package android:name="com.topjohnwu.magisk" />
+        <package android:name="io.github.vvb2060.magisk" />
+        <package android:name="me.weishu.kernelsu" />
+        <package android:name="eu.chainfire.supersu" />
+        <package android:name="com.koushikdutta.superuser" />
+        <package android:name="org.lsposed.manager" />
+        <package android:name="de.robv.android.xposed.installer" />
+    </queries>
+</manifest>

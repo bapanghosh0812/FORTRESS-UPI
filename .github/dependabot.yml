@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: gomod
+    directories:
+      - /shared/crypto
+      - /shared/platform
+      - /services/core-ledger
+      - /services/offline-mesh
+      - /services/security-gateway
+    schedule: { interval: weekly }
+
+  - package-ecosystem: gradle
+    directory: /apps/mobile/android
+    schedule: { interval: weekly }
+    groups:
+      androidx: { patterns: ["androidx.*"] }
+
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    schedule: { interval: weekly }

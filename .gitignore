@@ -1,0 +1,38 @@
+# Go
+coverage.out
+*.test
+/fixture.json
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+captures/
+.externalNativeBuild/
+.cxx/
+*.jks
+*.keystore
+keystore.properties
+
+# iOS
+xcuserdata/
+DerivedData/
+.build/
+*.xcuserstate
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+*.p12
+google-services.json

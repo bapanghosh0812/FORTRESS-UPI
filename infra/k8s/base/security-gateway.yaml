@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+data:
+  # Upstreams are reached over ambient-mesh mTLS (HBONE) inside the cluster.
+  # prefix|upstream[|public]; only device binding is public, everything else
+  # needs a verified device signature.
+  ROUTES: "/v1/bind/|http://identity.fortress-core.svc.cluster.local:8080|public;/v1/offline/|http://offline-mesh.fortress-core.svc.cluster.local:8080;/v1/payments|http://payments.fortress-core.svc.cluster.local:8080;/v1/accounts|http://payments.fortress-core.svc.cluster.local:8080;/v1/transactions|http://payments.fortress-core.svc.cluster.local:8080;/v1/limits|http://payments.fortress-core.svc.cluster.local:8080;/v1/profile|http://payments.fortress-core.svc.cluster.local:8080;/v1/directory/|http://payments.fortress-core.svc.cluster.local:8080"
+  # Device public keys come from the identity service.
+  DEVICE_REGISTRY_URL: "http://identity.fortress-core.svc.cluster.local:8080"
+  DEVICE_KEYS: ""
+  FORTRESS_ENV: "staging"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+  labels:
+    app.kubernetes.io/name: security-gateway
+    app.kubernetes.io/part-of: fortress
+spec:
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: security-gateway
+        app.kubernetes.io/part-of: fortress
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: security-gateway
+      automountServiceAccountToken: false
+      priorityClassName: fortress-critical
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+      containers:
+        - name: security-gateway
+          # Digest injected by CD (`kustomize edit set image`) after cosign
+          # verification; Kyverno rejects unsigned or tag-only references.
+          image: ghcr.io/fortress-upi/fortress-security-gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: security-gateway
+          env:
+            # Go 1.25+ derives GOMAXPROCS from the cgroup CPU limit; the soft
+            # memory limit keeps GC ahead of the OOM killer.
+            - name: GOMEMLIMIT
+              value: "230MiB"
+          # Guaranteed QoS (requests == limits) + static CPU manager = exclusive
+          # cores and no CFS throttling spikes on the p99.
+          resources:
+            requests:
+              cpu: "1"
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 1
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+spec:
+  selector:
+    app.kubernetes.io/name: security-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  # Prefer endpoints in the caller's zone (latency + cross-AZ cost).
+  trafficDistribution: PreferClose
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: security-gateway
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+spec:
+  scaleTargetRef:
+    name: security-gateway
+  minReplicaCount: 3
+  maxReplicaCount: 200
+  pollingInterval: 5
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          selectPolicy: Max
+          policies:
+            - { type: Percent, value: 100, periodSeconds: 15 }
+            - { type: Pods, value: 20, periodSeconds: 15 }
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - { type: Percent, value: 10, periodSeconds: 60 }
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        query: sum(rate(fortress_http_requests_total{namespace="fortress-core",route="verified_proxy"}[30s]))
+        threshold: "2000"
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"

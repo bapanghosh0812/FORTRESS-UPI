@@ -1,0 +1,215 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "d220e24b3052eed32371f5c6bb64cc94",
+    "entities": [
+      {
+        "tableName": "notes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`noteId` TEXT NOT NULL, `keyAlias` TEXT NOT NULL, `denominationPaise` INTEGER NOT NULL, `expiresAtEpochSec` INTEGER NOT NULL, `enforcement` INTEGER NOT NULL, `signedCert` BLOB NOT NULL, `status` TEXT NOT NULL, `updatedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`noteId`))",
+        "fields": [
+          {
+            "fieldPath": "noteId",
+            "columnName": "noteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyAlias",
+            "columnName": "keyAlias",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "denominationPaise",
+            "columnName": "denominationPaise",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtEpochSec",
+            "columnName": "expiresAtEpochSec",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enforcement",
+            "columnName": "enforcement",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signedCert",
+            "columnName": "signedCert",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtMillis",
+            "columnName": "updatedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "noteId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notes_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notes_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_notes_expiresAtEpochSec",
+            "unique": false,
+            "columnNames": [
+              "expiresAtEpochSec"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notes_expiresAtEpochSec` ON `${TABLE_NAME}` (`expiresAtEpochSec`)"
+          }
+        ]
+      },
+      {
+        "tableName": "outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `paymentId` TEXT NOT NULL, `direction` TEXT NOT NULL, `amountPaise` INTEGER NOT NULL, `counterpartyName` TEXT NOT NULL, `bundle` BLOB NOT NULL, `createdAtMillis` INTEGER NOT NULL, `syncState` TEXT NOT NULL, `attempts` INTEGER NOT NULL, `lastError` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentId",
+            "columnName": "paymentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountPaise",
+            "columnName": "amountPaise",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "counterpartyName",
+            "columnName": "counterpartyName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bundle",
+            "columnName": "bundle",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtMillis",
+            "columnName": "createdAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "syncState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outbox_paymentId_direction",
+            "unique": true,
+            "columnNames": [
+              "paymentId",
+              "direction"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_paymentId_direction` ON `${TABLE_NAME}` (`paymentId`, `direction`)"
+          },
+          {
+            "name": "index_outbox_syncState",
+            "unique": false,
+            "columnNames": [
+              "syncState"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outbox_syncState` ON `${TABLE_NAME}` (`syncState`)"
+          }
+        ]
+      },
+      {
+        "tableName": "received_notes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`noteId` TEXT NOT NULL, `paymentId` TEXT NOT NULL, `receivedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`noteId`))",
+        "fields": [
+          {
+            "fieldPath": "noteId",
+            "columnName": "noteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentId",
+            "columnName": "paymentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedAtMillis",
+            "columnName": "receivedAtMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "noteId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd220e24b3052eed32371f5c6bb64cc94')"
+    ]
+  }
+}

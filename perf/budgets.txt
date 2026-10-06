@@ -1,0 +1,5 @@
+# benchmark                      max median ns/op on a GitHub-hosted 4-vCPU runner
+# Settlement verifies 4 P-256 signatures (2 issuer + 2 spend) ≈ 0.25–0.4 ms.
+BenchmarkVerifyTwoNoteBundle     1000000
+# Device-signature check: 1 P-256 verify + body hash + header parsing.
+BenchmarkVerify                  300000

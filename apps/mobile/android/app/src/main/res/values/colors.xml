@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pearl window background; values-night switches to Midnight navy. Never flat black. -->
+    <color name="fortress_window">#FFF3F4F8</color>
+    <color name="fortress_navy">#FF0A1636</color>
+</resources>

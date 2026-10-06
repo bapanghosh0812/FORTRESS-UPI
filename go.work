@@ -1,0 +1,13 @@
+// Local development workspace. CI and Docker build each module with GOWORK=off
+// and resolve monorepo siblings through go.mod replace directives.
+go 1.27.0
+
+use (
+	./services/core-ledger
+	./services/identity
+	./services/offline-mesh
+	./services/payments
+	./services/security-gateway
+	./shared/crypto
+	./shared/platform
+)

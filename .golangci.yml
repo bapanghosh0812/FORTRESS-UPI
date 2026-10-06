@@ -1,0 +1,101 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - contextcheck
+    - depguard
+    - errcheck
+    - errorlint
+    - forbidigo
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    gosec:
+      severity: low
+      confidence: low
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # readability over a few bytes per struct
+        - shadow # idiomatic `if err := ...` scoping
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: time-naming
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming
+    depguard:
+      rules:
+        domain-purity:
+          files:
+            - "**/internal/domain/**/*.go"
+          deny:
+            - pkg: net/http
+              desc: the domain layer performs no I/O
+            - pkg: database/sql
+              desc: the domain layer performs no I/O
+            - pkg: os
+              desc: the domain layer does not read the environment
+            - pkg: log/slog
+              desc: the domain layer returns errors; adapters log
+        no-weak-crypto:
+          files:
+            - $all
+          deny:
+            - pkg: crypto/md5
+              desc: broken hash
+            - pkg: crypto/sha1
+              desc: broken hash
+            - pkg: crypto/des
+              desc: broken cipher
+            - pkg: crypto/rc4
+              desc: broken cipher
+            - pkg: math/rand
+              desc: use crypto/rand
+            - pkg: math/rand/v2
+              desc: use crypto/rand
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: use the structured logger (shared/platform/server.NewLogger)
+        - pattern: ^http\.ListenAndServe(TLS)?$
+          msg: use shared/platform/server (timeouts, limits, graceful shutdown)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, forbidigo]
+      - path: cmd/genfixture/
+        linters: [forbidigo]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

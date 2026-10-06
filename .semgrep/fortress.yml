@@ -1,0 +1,111 @@
+# Fortress-specific SAST rules. Registry packs (p/default, p/golang, p/kotlin,
+# p/secrets, …) run alongside these in CI; these encode house policy.
+rules:
+  # ───────────────────────────── Go ─────────────────────────────
+  - id: fortress-go-insecure-tls
+    languages: [go]
+    severity: ERROR
+    message: TLS verification must never be disabled.
+    pattern: |
+      tls.Config{..., InsecureSkipVerify: true, ...}
+
+  - id: fortress-go-log-pii
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Never log credentials or PII (UPI PIN, OTP, VPA, Aadhaar, PAN, account
+      numbers, keys). Log opaque IDs instead.
+    patterns:
+      - pattern-either:
+          - pattern: $L.Debug(..., "$K", ...)
+          - pattern: $L.Info(..., "$K", ...)
+          - pattern: $L.Warn(..., "$K", ...)
+          - pattern: $L.Error(..., "$K", ...)
+          - pattern: $L.DebugContext(..., "$K", ...)
+          - pattern: $L.InfoContext(..., "$K", ...)
+          - pattern: $L.WarnContext(..., "$K", ...)
+          - pattern: $L.ErrorContext(..., "$K", ...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^(upi_?pin|m?pin|otp|vpa|aadhaar|pan|account_?(no|number)|cvv|private_?key|passphrase|password|secret)$
+
+  - id: fortress-go-ecdsa-non-asn1
+    languages: [go]
+    severity: WARNING
+    message: Use ecdsa.SignASN1/VerifyASN1 (DER) — the format every Fortress keystore emits.
+    pattern-either:
+      - pattern: ecdsa.Sign(...)
+      - pattern: ecdsa.Verify(...)
+
+  # ───────────────────────────── Kotlin / Android ─────────────────────────────
+  - id: fortress-kotlin-android-log
+    languages: [kotlin]
+    severity: ERROR
+    message: android.util.Log is forbidden in production code (log leakage); R8 strips it, but don't rely on that.
+    pattern-either:
+      - pattern: android.util.Log.$M(...)
+      - pattern: Log.$M(...)
+
+  - id: fortress-kotlin-weak-cipher
+    languages: [kotlin]
+    severity: ERROR
+    message: Only AES/GCM/NoPadding (or keystore-mandated modes) is allowed.
+    patterns:
+      - pattern: Cipher.getInstance("$ALG")
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(?!AES/GCM/NoPadding$).*
+
+  - id: fortress-kotlin-weak-hash
+    languages: [kotlin]
+    severity: ERROR
+    message: MD5/SHA-1 are forbidden.
+    patterns:
+      - pattern: MessageDigest.getInstance("$H")
+      - metavariable-regex:
+          metavariable: $H
+          regex: (?i)^(MD2|MD5|SHA-?1)$
+
+  - id: fortress-kotlin-insecure-random
+    languages: [kotlin]
+    severity: ERROR
+    message: Use java.security.SecureRandom for anything security-relevant.
+    pattern-either:
+      - pattern: java.util.Random(...)
+      - pattern: kotlin.random.Random.$M(...)
+
+  - id: fortress-kotlin-custom-trust-manager
+    languages: [kotlin]
+    severity: ERROR
+    message: Custom TrustManagers/HostnameVerifiers are forbidden; use network_security_config pinning.
+    pattern-either:
+      - pattern: |
+          object : X509TrustManager { ... }
+      - pattern: |
+          HostnameVerifier { ... }
+
+  - id: fortress-kotlin-webview-js
+    languages: [kotlin]
+    severity: ERROR
+    message: Fortress ships no JavaScript-enabled WebViews.
+    pattern: $W.settings.javaScriptEnabled = true
+
+  - id: fortress-kotlin-world-accessible
+    languages: [kotlin]
+    severity: ERROR
+    message: World-readable/writable files are forbidden.
+    pattern-either:
+      - pattern: Context.MODE_WORLD_READABLE
+      - pattern: Context.MODE_WORLD_WRITEABLE
+
+  # ───────────────────────────── Android manifest ─────────────────────────────
+  - id: fortress-manifest-backup-or-cleartext
+    languages: [generic]
+    severity: ERROR
+    message: Backups and cleartext traffic must stay disabled.
+    paths:
+      include: ["**/AndroidManifest.xml"]
+    pattern-either:
+      - pattern: android:allowBackup="true"
+      - pattern: android:usesCleartextTraffic="true"
+      - pattern: android:debuggable="true"

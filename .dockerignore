@@ -1,0 +1,9 @@
+# Default-deny build context: only the Go sources a service image needs.
+*
+!shared/
+!services/
+**/.env
+**/*.pem
+**/*.key
+**/*.p12
+**/testdata/secrets/

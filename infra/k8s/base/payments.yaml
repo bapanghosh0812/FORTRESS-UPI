@@ -1,0 +1,205 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payments
+  namespace: fortress-core
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments
+  namespace: fortress-core
+data:
+  FORTRESS_ENV: "staging"
+  PSP_MODE: "sandbox"
+  PSP_HMAC_SECRET_FILE: "/etc/fortress/secrets/psp-hmac"
+  # Published payment policy (paise). Compliance updates these when an NPCI/RBI
+  # circular changes a cap; apps pick the change up on their next sync.
+  UPI_PER_TXN_PAISE: "10000000"
+  UPI_DAILY_PAISE: "10000000"
+  UPI_DAILY_COUNT: "20"
+  OFFLINE_PER_TXN_PAISE: "100000"
+  OFFLINE_WALLET_PAISE: "500000"
+  NEW_DEVICE_CAP_PAISE: "500000"
+  LIMITS_SOURCE: "NPCI and RBI limits, as configured by Fortress compliance"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments
+  namespace: fortress-core
+  labels:
+    app.kubernetes.io/name: payments
+    app.kubernetes.io/part-of: fortress
+spec:
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payments
+        app.kubernetes.io/part-of: fortress
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: payments
+      automountServiceAccountToken: false
+      priorityClassName: fortress-critical
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: payments
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: payments
+      volumes:
+        - name: secrets
+          secret:
+            secretName: payments-secrets
+            defaultMode: 0400
+      containers:
+        - name: payments
+          # Digest injected by CD (`kustomize edit set image`) after cosign
+          # verification; Kyverno rejects unsigned or tag-only references.
+          image: ghcr.io/fortress-upi/fortress-payments@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: payments
+          env:
+            # Go 1.25+ derives GOMAXPROCS from the cgroup CPU limit; the soft
+            # memory limit keeps GC ahead of the OOM killer.
+            - name: GOMEMLIMIT
+              value: "230MiB"
+          # Guaranteed QoS (requests == limits) + static CPU manager = exclusive
+          # cores and no CFS throttling spikes on the p99.
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 256Mi
+          volumeMounts:
+            - name: secrets
+              mountPath: /etc/fortress/secrets
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 1
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 2
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments
+  namespace: fortress-core
+spec:
+  selector:
+    app.kubernetes.io/name: payments
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  # Prefer endpoints in the caller's zone (latency + cross-AZ cost).
+  trafficDistribution: PreferClose
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payments
+  namespace: fortress-core
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payments
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payments
+  namespace: fortress-core
+spec:
+  scaleTargetRef:
+    name: payments
+  minReplicaCount: 3 # one per AZ, always
+  maxReplicaCount: 60
+  pollingInterval: 5
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          selectPolicy: Max
+          policies:
+            - { type: Percent, value: 100, periodSeconds: 15 }
+            - { type: Pods, value: 10, periodSeconds: 15 }
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - { type: Percent, value: 10, periodSeconds: 60 }
+  triggers:
+    # Primary: requests/s per replica (AverageValue).
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        query: sum(rate(fortress_http_requests_total{namespace="fortress-core",route="payments"}[30s]))
+        threshold: "600"
+    # Safety net: CPU saturation.
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "60"

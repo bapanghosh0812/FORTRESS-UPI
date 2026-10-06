@@ -1,0 +1,12 @@
+# Two-person rule: every security-boundary path needs a security reviewer.
+*                                         @fortress-upi/platform
+/shared/crypto/                           @fortress-upi/security @fortress-upi/platform
+/services/security-gateway/               @fortress-upi/security
+/services/offline-mesh/internal/domain/   @fortress-upi/security @fortress-upi/payments
+/apps/mobile/android/core/crypto/         @fortress-upi/security @fortress-upi/mobile
+/apps/mobile/android/core/security/       @fortress-upi/security @fortress-upi/mobile
+/apps/mobile/android/core/offline/        @fortress-upi/security @fortress-upi/mobile
+/deploy/                                  @fortress-upi/security @fortress-upi/platform
+/infra/                                   @fortress-upi/security @fortress-upi/platform
+/.github/                                 @fortress-upi/security
+/.semgrep/                                @fortress-upi/security

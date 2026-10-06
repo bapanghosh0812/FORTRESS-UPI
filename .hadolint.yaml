@@ -1,0 +1,8 @@
+failure-threshold: warning
+trustedRegistries:
+  - docker.io
+  - gcr.io
+label-schema:
+  org.opencontainers.image.title: text
+  org.opencontainers.image.revision: text
+strict-labels: false

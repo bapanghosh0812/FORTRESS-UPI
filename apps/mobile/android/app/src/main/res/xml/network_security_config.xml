@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Transport policy for the whole process (OkHttp, WebView-less by design, Play services).
+  * No cleartext anywhere.
+  * System CAs only — user-installed CAs are NOT trusted (defeats MITM proxies on rooted/managed devices).
+  * SPKI pinning for the Fortress API with a primary + backup key and an expiry
+    (an expired pin-set falls back to CA validation rather than bricking the app).
+
+  The pins below are PLACEHOLDERS (fail-closed: they match nothing). The release
+  gate in app/build.gradle.kts refuses to build production artifacts until they
+  are replaced with: openssl x509 -in cert.pem -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.fortress-upi.example</domain>
+        <pin-set expiration="2027-10-01">
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>

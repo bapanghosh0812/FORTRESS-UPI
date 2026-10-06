@@ -1,0 +1,188 @@
+# Zero-trust east-west: deny everything, then allow exactly the call graph
+#   kong (fortress-edge) → security-gateway → identity / payments / offline-mesh / core-ledger
+#   identity, payments → fortress-egress (sponsor PSP, Play Integrity) on 443
+#   offline-mesh → core-ledger (ledger instructions)
+#   monitoring/prometheus → :8080/metrics on every pod
+# Istio ambient note: ztunnel carries pod-to-pod traffic over HBONE (TCP 15008).
+# Clusters running ambient must also allow 15008 on the same selectors.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: fortress-core
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: fortress-core
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: fortress
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: security-gateway
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: security-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fortress-edge
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kong
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: identity
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: payments
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: offline-mesh
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: core-ledger
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: offline-mesh
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: offline-mesh
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: core-ledger
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: core-ledger
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: core-ledger
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: offline-mesh
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: identity
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: identity
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    # External partners only through the egress gateway, which pins and logs them.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fortress-egress
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payments
+  namespace: fortress-core
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: payments
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: security-gateway
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    # External partners only through the egress gateway, which pins and logs them.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fortress-egress
+      ports:
+        - { protocol: TCP, port: 443 }

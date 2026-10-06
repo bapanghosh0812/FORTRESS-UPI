@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fortress-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4173", "--bind", "127.0.0.1", "--directory", "apps/preview"],
+      "port": 4173
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fortress-core
+  labels:
+    # Pod Security Admission: reject anything below the "restricted" profile.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    # Ambient mesh: mTLS (SPIFFE identities) for every pod without sidecars.
+    istio.io/dataplane-mode: ambient
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: fortress-critical
+value: 1000000
+globalDefault: false
+description: Payment-path pods. Preempts batch and observability workloads.
